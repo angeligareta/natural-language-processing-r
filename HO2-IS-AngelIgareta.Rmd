@@ -1,0 +1,147 @@
+# Intelligent Systems. Hands-on 2
+## Author: Angel Igareta [angel@igareta.com](angel@igareta.com)
+
+## Packages ----
+```{r}
+# install.packages("rJava")
+# install.packages("openNLPmodels.en", repos <- "http://datacube.wu.ac.at")
+# install.packages("NLP")
+# install.packages("openNLP")
+# install.packages("tm")
+
+library(rJava)
+.jinit(parameters <- "-Xmx8g")
+library(NLP)
+library(openNLP)
+library(openNLPmodels.en)
+library(tm)
+library(dplyr)
+```
+
+## Utils ----
+```{r}
+get_annotations_from_document <- function(doc) {
+  x <- as.String(doc)
+  sent_token_annotator <- Maxent_Sent_Token_Annotator()
+  word_token_annotator <- Maxent_Word_Token_Annotator()
+  pos_tag_annotator <- Maxent_POS_Tag_Annotator()
+  gc()
+  y1 <- NLP::annotate(x, list(sent_token_annotator, word_token_annotator))
+  y2 <- NLP::annotate(x, pos_tag_annotator, y1)
+  parse_annotator <- Parse_Annotator()
+  y3 <- NLP::annotate(x, parse_annotator, y2)
+  return(y3)
+}
+
+get_annotated_merged_document <- function(doc, annotations) {
+  x <- as.String(doc)
+  y2w <- subset(annotations, type == "word")
+  tags <- sapply(y2w$features, '[[', "POS")
+  r1 <- sprintf("%s/%s", x[y2w], tags)
+  r2 <- paste(r1, collapse = " ")
+  return(r2)
+}
+
+get_annotated_plain_text_document <- function(doc, annotations) {
+  x <- as.String(doc)
+  a <- AnnotatedPlainTextDocument(x, annotations)
+  return(a)
+}
+```
+
+## Load corpus ----
+```{r}
+corpus_source <- DirSource("./dataset/pos", encoding = "UTF-8")
+corpus <- Corpus(corpus_source)
+
+## I will use only the selected corpus as the excercise asked, the transformations would be the same for the rest.
+selected_corpus <- corpus["cv687_21100.txt"]
+```
+
+## Annotation ----
+```{r}
+gc()
+selected_corpus_annotations <- lapply(selected_corpus, get_annotations_from_document)
+```
+
+### Show annotations sentences and words
+```{r}
+head(selected_corpus_annotations[[1]])
+tail(selected_corpus_annotations[[1]])
+```
+
+### Attach the annotations to the document and store the annotated corpus in another variable
+```{r}
+selected_corpus_tagged <- Map(get_annotated_plain_text_document, selected_corpus, selected_corpus_annotations)
+selected_corpus_tagged[[1]]
+```
+
+### Store all the annotations inline with the text and store the annotated corpus in another variable
+```{r}
+selected_corpus_tagged_text <- Map(get_annotated_merged_document, selected_corpus, selected_corpus_annotations)
+selected_corpus_tagged_text[[1]]
+```
+## Evaluation ----
+### Perform evaluation of the first two sentences of the selected corpus
+```{r}
+selected_doc <- selected_corpus_tagged[[1]]
+
+first_sentence_tagged <- tagged_sents(selected_doc)[[1]]
+
+### We omit the real 2nd and 3rd sentence because they are very short and is not valid, we take the fifth.
+second_sentence_tagged <- tagged_sents(selected_doc)[[5]]
+```
+
+### Show evaluation comparision for first sentence
+```{r}
+pos_custom_evaluation_first_sentence <- c("JJ", "NN", "NNS", "VHP", "RB", "VVN", "NP", ".")
+pos_difference_first_sentence <- c("", "", "", "☑", "", "☑", "☑", "")
+pos_first_sentence <- data.frame(
+  matrix(c(first_sentence_tagged$token, first_sentence_tagged$tag, pos_custom_evaluation_first_sentence, pos_difference_first_sentence), nrow = length(first_sentence_tagged$token))
+)
+
+## Add custom headers
+colnames(pos_first_sentence) <- c("Words in First Sentence", "Penn Treebank POS Annotation", "Custom POS Annotation", "Different")
+
+View(pos_first_sentence)
+```
+
+### Show evaluation comparision for second sentence
+```{r}
+pos_custom_evaluation_second_sentence <- c("PDT", "DT", "NNS", "VBP", "JJ", "TO", "NNS", "CC", "NNS", ".")
+pos_difference_second_sentence <- c("☑", "", "", "", "", "", "", "", "", "")
+
+pos_second_sentence <- data.frame(
+  matrix(c(second_sentence_tagged$token, second_sentence_tagged$tag, pos_custom_evaluation_second_sentence, pos_difference_second_sentence), nrow = length(second_sentence_tagged$token))
+)
+
+## Add custom headers
+colnames(pos_second_sentence) <- c("Words in First Sentence", "Penn Treebank POS Annotation", "Custom POS Annotation", "Different")
+
+View(pos_second_sentence)
+```
+
+## Evaluation Metrics ---
+### The precision of the previous two sentences with the overall recall are the following.
+```{r}
+number_errors_first_sentence <- (pos_first_sentence %>%
+  dplyr::filter(Different != "") %>%
+  count())$n
+number_errors_second_sentence <- (pos_second_sentence %>%
+  dplyr::filter(Different != "") %>%
+  count())$n
+
+precision_first_sentence <- (length(rownames(pos_first_sentence)) - number_errors_first_sentence) / length(rownames(pos_first_sentence))
+precision_second_sentence <- (length(rownames(pos_second_sentence)) - number_errors_second_sentence) / length(rownames(pos_second_sentence))
+total_precision <- (length(rownames(pos_first_sentence)) + length(rownames(pos_second_sentence)) -
+  number_errors_first_sentence -
+  number_errors_second_sentence) / (length(rownames(pos_first_sentence)) + length(rownames(pos_second_sentence)))
+recall <- (length(rownames(pos_first_sentence)) + length(rownames(pos_second_sentence)) -
+  number_errors_first_sentence -
+  number_errors_second_sentence) / length(words(selected_doc))
+
+sprintf("Precision First Sentence: %s", precision_first_sentence)
+sprintf("Precision Second Sentence: %s", precision_second_sentence)
+sprintf("Total Precision: %s", total_precision)
+sprintf("Recall: %s", recall)
+```
