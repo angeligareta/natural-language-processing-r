@@ -2,21 +2,25 @@
 ## Author: Angel Igareta [angel@igareta.com](angel@igareta.com)
 
 ## Packages ----
-```{r}
+```{r echo = T, warning = F, results = 'hide'}
 # install.packages("rJava")
-# install.packages("openNLPmodels.en", repos <- "http://datacube.wu.ac.at")
+# install.packages("openNLPmodels.en", repos <- "http://datacube.wu.ac.at", lib = "D:/angel/Documents/R/win-library/3.6")
 # install.packages("NLP")
 # install.packages("openNLP")
 # install.packages("tm")
+# install.packages("dplyr")
+# install.packages("stringr")
+# Sys.setenv(JAVA_HOME='C:\\Program Files\\Java\\jdk1.8.0_231\\jre') # for 64-bit version
 
 library(rJava)
-.jinit(parameters <- "-Xmx8g")
+.jinit(parameters <- "-Xmx4g")
 library(NLP)
 library(openNLP)
 library(openNLPmodels.en)
 library(tm)
 library(dplyr)
 library(stringr)
+library(ggplot2)
 ```
 
 ## Utils. [Taken from Raúl García-Castro R-Pub](https://rpubs.com/rgcmme/IS-HO3) ----
@@ -93,7 +97,7 @@ detect_patterns_in_corpus <- function(corpus, patterns) {
                                      nrow = length(corpus)))
   names(vall_entities) <- c("File", patterns)
   for (i in seq_along(patterns)) {
-    vall_entities[, i + 1] = unlist(lapply(corpus, detectPatternOnDocument,
+    vall_entities[, i + 1] = unlist(lapply(corpus, detect_pattern_on_document,
                                            pattern = patterns[i]))
   }
   for (i in seq_along(corpus)) {
@@ -109,7 +113,7 @@ detect_patterns_in_tagged_corpus <- function(corpus, taggedCorpus, patterns) {
                                      nrow = length(corpus)))
   names(vall_entities) <- c("File", patterns)
   for (i in seq_along(patterns)) {
-    vall_entities[, i + 1] = unlist(lapply(taggedCorpus, detectPatternOnDocument,
+    vall_entities[, i + 1] = unlist(lapply(taggedCorpus, detect_pattern_on_document,
                                            pattern = patterns[i]))
   }
   for (i in seq_along(corpus)) {
@@ -143,7 +147,7 @@ count_matches_per_row <- function(df) {
   return(entity_count_per_file[entityCountPerFile[2] != 0,])
 }
 
-# Prints the matches found per pattern.
+## Prints the matches found per pattern.
 print_matches_per_pattern <- function(patterns, matches) {
   for (i in seq_along(patterns)) {
     print(paste("PATTERN: ", patterns[i]))
@@ -186,7 +190,7 @@ merge_all_matches_in_lists <- function(df) {
   return(all_matches)
 }
 
-# Returns a data frame with all the files and the gold standard matches in a single list per file.
+## Returns a data frame with all the files and the gold standard matches in a single list per file.
 merge_gold_standard_in_lists <- function(df) {
   matches_per_file <- rep(list(list()), nrow(df))
 
@@ -207,7 +211,7 @@ merge_gold_standard_in_lists <- function(df) {
   return(all_matches)
 }
 
-# Calculates precision, recall and f-measure according to a gold standard.
+## Calculates precision, recall and f-measure according to a gold standard.
 calculate_metrics <- function(matches, matches.gs) {
   metrics <- data.frame(matrix(NA, ncol = 3, nrow = 1))
   names(metrics) <- c("Precision", "Recall", "Fmeasure")
@@ -246,13 +250,13 @@ calculate_metrics <- function(matches, matches.gs) {
 
 ## Load corpus ----
 ```{r}
-corpus_source <- DirSource("./dataset/pos", encoding = "UTF-8")
+## Test with a reduced corpus due Java issues
+corpus_source <- DirSource("./dataset/pos-reduced", encoding = "UTF-8")
 corpus <- Corpus(corpus_source)
 ```
 
 ## Annotation ----
 ```{r}
-gc()
 corpus_annotations <- lapply(corpus, get_annotations_from_document)
 ```
 
@@ -275,39 +279,97 @@ corpus_tagged_text[[1]]
 ```
 
 ## Patterns ----
-### We use POS (part-of-speech) tags to avoid incorrect words (such as and, or...)
+### Given patterns
 ```{r}
 patterns <- "created/VBN by/IN ([A-z]*)/NN ([A-z]*)/NN"
 patterns <- c(patterns, "created/VBN by/IN [A-z]*/NN [A-z]*/NN \\(/-LRB- and/CC ([A-z]*)/JJ ([A-z]*)/NN")
-patterns <- c(patterns, "screenwriter[s]?/NN[S]? ([A-z]*)/(?:NN[S]?|JJ) ([A-z]*)/(?:NN|JJ)")
-patterns <- c(patterns, "cinematographer/NN(?: ,/,)? ([A-z]*)/NN ([A-z]*)/NN")
+patterns <- c(patterns, "screenwriter[s]?/NN[S]? ([A-z]*)/(?:NN[S]?|JJ) ([A-z]*)/(?:NN[S]?|JJ)")
+patterns <- c(patterns, "cinematographer/NN(?: ,/,)? ([A-z]*)/(?:NN[S]?|JJ) ([A-z]*)/NN[S]?")
 patterns <- c(patterns, "cinematographer/NN(?: ,/,)? ([A-z]*)/NN ([A-z]*)/IN ([A-z]*)/NN")
 patterns <- c(patterns, "oscar/NN winner/NN ([A-z]*)/VBG ([A-z]*)/NNS")
 ```
 
-### Pattern detection
+### Extension patterns
+```{r}
+patterns <- c(patterns, "screenwriters/NNS [A-z]*/(?:NN[S]?|JJ) [A-z]*/(?:NN[S]?|JJ) \\(/-LRB- [A-z /]* \\)/-RRB- and/CC ([A-z]*)/(?:NN[S]?|JJ) ([A-z]*)/(?:NN|JJ)") # catch second screen writer
+patterns <- c(patterns, "([A-z]*)/NN ([A-z]*)/NN is/VBZ [A-z]*/VBG") ## name surnname is verb-ing ....
+patterns <- c(patterns, "([A-z]*)/NN ([A-z]*)/NN and/CC [A-z]*/NN[S]?") # name surname and name
+patterns <- c(patterns, "([A-z]*)/NN and/CC [A-z]*/JJ [A-z]*/NN[S]?") # name and name surname
+```
+
+### Patterns after analyzing the files randomly
+```{r}
+patterns <- c(patterns, "a/DT ([A-z]*)/(?:NN[S]?|JJ) ([A-z]*)/(?:NN[S]?|JJ) film/NN") # a name surname film
+patterns <- c(patterns, "to/TO say/VB ([A-z]*)/NN and/CC [A-z]*/NN") # to say (name) and name
+patterns <- c(patterns, "to/TO say/VB [A-z]*/NN and/CC ([A-z]*)/NN") # to say name and (name)
+patterns <- c(patterns, "named/VBN ([A-z]*)/(?:NN[S]?|JJ) ([A-z]*)/(?:NN[S]?|JJ)") # named name surname
+patterns <- c(patterns, "about/IN ([A-z]*)/(?:NN[S]?|JJ) ([A-z]*)/(?:NN[S]?|JJ)")  # about name surname
+patterns <- c(patterns, "made/VBD ([A-z]*)/(?:NN[S]?|JJ) ([A-z]*)/(?:NN[S]?|JJ) a/DT star/NN")  # about name surname
+```
+
+### Most significant patterns to increase recall
+```{r}
+patterns <- c(patterns, "([A-z]*)/(?:NN[S]?|JJ) ([A-z]*)/(?:NN[S]?|JJ|VBP) \\(/-LRB- [A-z]*/(?:NN[S]?|JJ) [A-z]*/(?:NN[S]?|JJ)") # name surname (name surname)
+patterns <- c(patterns, "\\(/-LRB- ([A-z]*)/(?:NN[S]?|JJ) ([A-z]*)/(?:NN[S]?|JJ)")  # (name surname)
+```
+
+### Patterns that did not work - Generated a lot of FP
+```{r}
+# patterns <- c(patterns, "[A-z]*/NN and/CC ([A-z]*)/NN") name and name
+# patterns <- c(patterns, "([A-z]*)/NN ([A-z]*)/NN is|was/VBZ|VBD [A-z]*/VBG") # name surname is|was verb-ing
+```
+
+
+## Patterns detection ----
 ```{r}
 found_entities <- detect_patterns_in_tagged_corpus(corpus, corpus_tagged_text, patterns)
-found_entities[!is.na(found_entities[4]), c(1, 4)]
 ```
 
-
-## Check how many times each pattern has been found.
-```{r}
-count_matches_per_column(found_entities)
-```
-
-## Print the context in which the patterns are found, to see if we can build better patterns.
-```{r}
-for (i in seq_along(pattern0)) {
-  print(paste("PATTERN: ", patterns[i]))
-  strings <- lapply(corpus, detectPatternOnDocumentWithContext, pattern = pattern0[i])
-  print(unlist(strings[!is.na(unlist(strings))]))
-  print(" ")
-}
-```
-
-## Print the matches found per pattern.
+### Print the matches found per pattern.
 ```{r}
 print_matches_per_pattern(patterns, found_entities)
 ```
+
+## Evaluation ----
+### Write results file in a csv
+```{r}
+write.table(found_entities, file = "results/found_entities.csv", row.names = F, na = "", sep = ";")
+```
+
+### Compare with a gold standard
+```{r}
+matches_list <- merge_all_matches_in_lists(found_entities)
+head(found_entities)
+```
+
+### Load the gold standard and put all gold standard matches in a list for comparison.
+```{r}
+gold_standard <- read.table(file = "dataset/goldStandard.csv", quote = "", na.strings = "",
+                            colClasses = "character", sep = ";")
+gold_standard_matches_list <- merge_gold_standard_in_lists(gold_standard)
+head(gold_standard_matches_list)
+```
+### Show lists for first file
+```{r}
+## MY MATCHES
+print(unlist(matches_list$Matches[[2]]))
+
+## GOLD STANDARD MATCHES
+print(unlist(gold_standard_matches_list$Matches[[2]]))
+```
+
+
+## Final results
+```{r}
+metrics <- calculate_metrics(matches_list, gold_standard_matches_list)
+
+## Show metrics
+metrics
+```
+
+## Conclusion
+In this exercise I tried to obtain a higher recall by sacrificing a bit of accuracy, obtaining a great recall of around 0.4 in the files I tested the patterns on and an accuracy of 0.8. The great result is that the F measure is very high, which indicates a good performance.
+
+ In order to do so, I did a research in random files to study where the names usually appeared. I found out one of the most common places was between parenthesis, in order to explain a reference. Hence, that is where I found the most significant patterns to increase the recall.
+
+I would have liked to have a more powerful PC to run the metrics over the whole corpus, but I could only select a reduced dataset, as my computer had java memory issues otherwise.
