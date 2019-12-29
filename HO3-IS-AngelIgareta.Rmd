@@ -1,0 +1,313 @@
+# Intelligent Systems. Hands-on 2
+## Author: Angel Igareta [angel@igareta.com](angel@igareta.com)
+
+## Packages ----
+```{r}
+# install.packages("rJava")
+# install.packages("openNLPmodels.en", repos <- "http://datacube.wu.ac.at")
+# install.packages("NLP")
+# install.packages("openNLP")
+# install.packages("tm")
+
+library(rJava)
+.jinit(parameters <- "-Xmx8g")
+library(NLP)
+library(openNLP)
+library(openNLPmodels.en)
+library(tm)
+library(dplyr)
+library(stringr)
+```
+
+## Utils. [Taken from Raúl García-Castro R-Pub](https://rpubs.com/rgcmme/IS-HO3) ----
+```{r}
+get_annotations_from_document <- function(doc) {
+  x <- as.String(doc)
+  sent_token_annotator <- Maxent_Sent_Token_Annotator()
+  word_token_annotator <- Maxent_Word_Token_Annotator()
+  pos_tag_annotator <- Maxent_POS_Tag_Annotator()
+  gc()
+  y1 <- NLP::annotate(x, list(sent_token_annotator, word_token_annotator))
+  y2 <- NLP::annotate(x, pos_tag_annotator, y1)
+  parse_annotator <- Parse_Annotator()
+  y3 <- NLP::annotate(x, parse_annotator, y2)
+  return(y3)
+}
+
+get_annotated_merged_document <- function(doc, annotations) {
+  x <- as.String(doc)
+  y2w <- subset(annotations, type == "word")
+  tags <- sapply(y2w$features, '[[', "POS")
+  r1 <- sprintf("%s/%s", x[y2w], tags)
+  r2 <- paste(r1, collapse = " ")
+  return(r2)
+}
+
+get_annotated_plain_text_document <- function(doc, annotations) {
+  x <- as.String(doc)
+  a <- AnnotatedPlainTextDocument(x, annotations)
+  return(a)
+}
+
+## Returns the pattern detected on an AnnotatedPlainTextDocument.
+detect_pattern_on_document <- function(doc, pattern) {
+  x <- as.String(doc)
+  res <- str_match_all(x, pattern)
+
+  dimrow <- dim(res[[1]])[1]
+  dimcol <- dim(res[[1]])[2]
+
+  # If there are no rows, no matches have been found
+  if (dimrow == 0) {
+    return(NA)
+  }else {
+    if (dimcol > 2) {
+      # If there are three or more columns, we have to paste all the groups together
+      for (i in 1:dimrow) {
+        res[[1]][i, 2] <- paste(res[[1]][i, 2:dimcol], collapse = ' ')
+      }
+    }
+
+    # We return all the results found separated by ','
+    if (dimcol != 1) {
+      result <- paste(res[[1]][, 2], collapse = ', ')
+    }else {
+      result <- paste(res[[1]][, 1], collapse = ', ')
+    }
+    return(result)
+  }
+}
+
+## Returns the pattern detected on an AnnotatedPlainTextDocument with some context.
+detect_pattern_on_document_with_context <- function(doc, pattern) {
+  txt <- as.String(doc)
+  number <- 50
+  coord <- str_locate(txt, pattern)
+  res3 <- substr(txt, coord[1] - number, coord[2] + number)
+  return(res3)
+}
+
+## Returns a data frame with all the patterns detected in a corpus.
+detect_patterns_in_corpus <- function(corpus, patterns) {
+  vall_entities <- data.frame(matrix(NA, ncol = length(patterns) + 1,
+                                     nrow = length(corpus)))
+  names(vall_entities) <- c("File", patterns)
+  for (i in seq_along(patterns)) {
+    vall_entities[, i + 1] = unlist(lapply(corpus, detectPatternOnDocument,
+                                           pattern = patterns[i]))
+  }
+  for (i in seq_along(corpus)) {
+    vall_entities$File[i] = meta(corpus[[i]])$id
+  }
+  return(vall_entities)
+}
+
+
+## Returns a data frame with all the patterns detected in an annotated corpus.
+detect_patterns_in_tagged_corpus <- function(corpus, taggedCorpus, patterns) {
+  vall_entities <- data.frame(matrix(NA, ncol = length(patterns) + 1,
+                                     nrow = length(corpus)))
+  names(vall_entities) <- c("File", patterns)
+  for (i in seq_along(patterns)) {
+    vall_entities[, i + 1] = unlist(lapply(taggedCorpus, detectPatternOnDocument,
+                                           pattern = patterns[i]))
+  }
+  for (i in seq_along(corpus)) {
+    vall_entities$File[i] = meta(corpus[[i]])$id
+  }
+  return(vall_entities)
+}
+
+## Counts the number of columns with non-NA values for each pattern.
+count_matches_per_column <- function(df) {
+  entity_count_per_pattern <- data.frame(matrix(NA, ncol = 2,
+                                                nrow = length(names(df)) - 1))
+  names(entity_count_per_pattern) <- c("Entity", "Count")
+
+  for (i in 2:length(names(df))) {
+    entity_count_per_pattern$Entity[i - 1] = names(df)[i]
+    entity_count_per_pattern$Count[i - 1] = nrow(subset(df, !is.na(df[i])))
+  }
+  return(entity_count_per_pattern)
+}
+
+## Counts the number of rows with non-NA values for each file.
+count_matches_per_row <- function(df) {
+  entity_count_per_file <- data.frame(matrix(NA, ncol = 2, nrow = nrow(df)))
+  names(entity_count_per_file) <- c("File", "Count")
+
+  for (i in seq_len(nrow(df))) {
+    entity_count_per_file$File[i] = df$File[i]
+    entity_count_per_file$Count[i] = length(Filter(Negate(is.na), df[i, 2:length(df[i,])]))
+  }
+  return(entity_count_per_file[entityCountPerFile[2] != 0,])
+}
+
+# Prints the matches found per pattern.
+print_matches_per_pattern <- function(patterns, matches) {
+  for (i in seq_along(patterns)) {
+    print(paste("PATTERN: ", patterns[i]))
+    strings <- matches[, i + 1][!is.na(unlist(matches[, i + 1]))]
+    print(strings)
+    print(" ")
+  }
+}
+
+## Returns a data frame with all the files and their matches in a single list per file.
+merge_all_matches_in_lists <- function(df) {
+  matches_per_file <- rep(list(list()), nrow(df))
+  for (i in seq_len(nrow(df))) {
+    matches <- list()
+    for (j in 2:ncol(df)) {
+      if (grepl(',', df[i, j])) {
+        b <- strsplit(as.character(df[i, j]), split = ',')
+        for (j in seq_along(b[[1]])) {
+          matches <- c(matches, str_trim(b[[1]][j]))
+        }
+      }else {
+        if (!(is.na(df[i, j]))) {
+          matches <- c(matches, str_trim(df[i, j]))
+        }
+      }
+    }
+    matches <- unique(matches)
+    matches_per_file[[i]] <- append(matches_per_file[[i]], matches)
+  }
+
+  files <- df[, 1]
+  matches <- matches_per_file
+
+  all_matches <- data.frame(matrix(NA, ncol = 2, nrow = nrow(df)))
+  names(all_matches) <- c("Files", "Matches")
+
+  all_matches$Files = files
+  all_matches$Matches = matches
+
+  return(all_matches)
+}
+
+# Returns a data frame with all the files and the gold standard matches in a single list per file.
+merge_gold_standard_in_lists <- function(df) {
+  matches_per_file <- rep(list(list()), nrow(df))
+
+  for (i in seq_len(nrow(df))) {
+    matches <- as.list(unlist(Filter(Negate(is.na), df[i, 2:length(df)])))
+    matches_per_file[[i]] <- append(matches_per_file[[i]], matches)
+  }
+
+  files <- df[, 1]
+  matches <- matches_per_file
+
+  all_matches <- data.frame(matrix(NA, ncol = 2, nrow = nrow(df)))
+  names(all_matches) <- c("Files", "Matches")
+
+  all_matches$Files = files
+  all_matches$Matches = matches
+
+  return(all_matches)
+}
+
+# Calculates precision, recall and f-measure according to a gold standard.
+calculate_metrics <- function(matches, matches.gs) {
+  metrics <- data.frame(matrix(NA, ncol = 3, nrow = 1))
+  names(metrics) <- c("Precision", "Recall", "Fmeasure")
+
+  num_correct <- 0
+  all_answers <- 0
+  possible_answers <- 0
+
+  for (i in seq_len(nrow(matches))) {
+    if (length(matches.gs$Matches[[i]]) != 0) {
+      l <- str_trim(unlist(matches[i, 2]))
+      l_gs <- unname(unlist(matches.gs[i, 2]))
+      intersection <- intersect(l, l_gs)
+      num_correct <- num_correct + length(intersection)
+      all_answers <- all_answers + length(l)
+      possible_answers <- possible_answers + length(l_gs)
+    }
+  }
+
+  metrics$Precision = num_correct / all_answers
+  metrics$Recall = num_correct / possible_answers
+
+  beta <- 1
+  if ((metrics$Precision == 0) & (metrics$Recall == 0)) {
+    metrics$Fmeasure = 0
+  } else {
+    metrics$Fmeasure = ((sqrt(beta) + 1) *
+      metrics$Precision *
+      metrics$Recall) /
+      ((sqrt(beta) * metrics$Precision) + metrics$Recall)
+  }
+
+  return(metrics)
+}
+```
+
+## Load corpus ----
+```{r}
+corpus_source <- DirSource("./dataset/pos", encoding = "UTF-8")
+corpus <- Corpus(corpus_source)
+```
+
+## Annotation ----
+```{r}
+gc()
+corpus_annotations <- lapply(corpus, get_annotations_from_document)
+```
+
+### Show annotations sentences and words
+```{r}
+head(corpus_annotations[[1]])
+tail(corpus_annotations[[1]])
+```
+
+### Attach the annotations to the document and store the annotated corpus in another variable
+```{r}
+corpus_tagged <- Map(get_annotated_plain_text_document, corpus, corpus_annotations)
+corpus_tagged[[1]]
+```
+
+### Store all the annotations inline with the text and store the annotated corpus in another variable
+```{r}
+corpus_tagged_text <- Map(get_annotated_merged_document, corpus, corpus_annotations)
+corpus_tagged_text[[1]]
+```
+
+## Patterns ----
+### We use POS (part-of-speech) tags to avoid incorrect words (such as and, or...)
+```{r}
+patterns <- "created/VBN by/IN ([A-z]*)/NN ([A-z]*)/NN"
+patterns <- c(patterns, "created/VBN by/IN [A-z]*/NN [A-z]*/NN \\(/-LRB- and/CC ([A-z]*)/JJ ([A-z]*)/NN")
+patterns <- c(patterns, "screenwriter[s]?/NN[S]? ([A-z]*)/(?:NN[S]?|JJ) ([A-z]*)/(?:NN|JJ)")
+patterns <- c(patterns, "cinematographer/NN(?: ,/,)? ([A-z]*)/NN ([A-z]*)/NN")
+patterns <- c(patterns, "cinematographer/NN(?: ,/,)? ([A-z]*)/NN ([A-z]*)/IN ([A-z]*)/NN")
+patterns <- c(patterns, "oscar/NN winner/NN ([A-z]*)/VBG ([A-z]*)/NNS")
+```
+
+### Pattern detection
+```{r}
+found_entities <- detect_patterns_in_tagged_corpus(corpus, corpus_tagged_text, patterns)
+found_entities[!is.na(found_entities[4]), c(1, 4)]
+```
+
+
+## Check how many times each pattern has been found.
+```{r}
+count_matches_per_column(found_entities)
+```
+
+## Print the context in which the patterns are found, to see if we can build better patterns.
+```{r}
+for (i in seq_along(pattern0)) {
+  print(paste("PATTERN: ", patterns[i]))
+  strings <- lapply(corpus, detectPatternOnDocumentWithContext, pattern = pattern0[i])
+  print(unlist(strings[!is.na(unlist(strings))]))
+  print(" ")
+}
+```
+
+## Print the matches found per pattern.
+```{r}
+print_matches_per_pattern(patterns, found_entities)
+```

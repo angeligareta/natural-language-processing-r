@@ -18,7 +18,7 @@ library(tm)
 library(dplyr)
 ```
 
-## Utils ----
+## Utils. [Taken from Raúl García-Castro R-Pub](https://rpubs.com/rgcmme/IS-HO2) ----
 ```{r}
 get_annotations_from_document <- function(doc) {
   x <- as.String(doc)
@@ -145,3 +145,6 @@ sprintf("Precision Second Sentence: %s", precision_second_sentence)
 sprintf("Total Precision: %s", total_precision)
 sprintf("Recall: %s", recall)
 ```
+
+## Conclusions
+The overall...
