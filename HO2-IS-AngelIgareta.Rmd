@@ -2,7 +2,7 @@
 ## Author: Angel Igareta [angel@igareta.com](angel@igareta.com)
 
 ## Packages ----
-```{r}
+```{r echo = T, warning = F, results = 'hide'}
 # install.packages("rJava")
 # install.packages("openNLPmodels.en", repos <- "http://datacube.wu.ac.at")
 # install.packages("NLP")
@@ -94,57 +94,53 @@ second_sentence_tagged <- tagged_sents(selected_doc)[[5]]
 
 ### Show evaluation comparision for first sentence
 ```{r}
-pos_custom_evaluation_first_sentence <- c("JJ", "NN", "NNS", "VHP", "RB", "VVN", "NP", ".")
-pos_difference_first_sentence <- c("", "", "", "☑", "", "☑", "☑", "")
+pos_custom_evaluation_first_sentence <- c("JJ", "NN", "NNS", "VBP", "RB", "VBN", "NNP", ".")
+pos_difference_first_sentence <- c("", "", "", "", "", "", "X", "")
 pos_first_sentence <- data.frame(
   matrix(c(first_sentence_tagged$token, first_sentence_tagged$tag, pos_custom_evaluation_first_sentence, pos_difference_first_sentence), nrow = length(first_sentence_tagged$token))
 )
 
 ## Add custom headers
-colnames(pos_first_sentence) <- c("Words in First Sentence", "Penn Treebank POS Annotation", "Custom POS Annotation", "Different")
+colnames(pos_first_sentence) <- c("Words in 1º Sentence", "POS Tag", "Custom POS Tag", "Diff")
 
-View(pos_first_sentence)
+pos_first_sentence
 ```
 
 ### Show evaluation comparision for second sentence
 ```{r}
-pos_custom_evaluation_second_sentence <- c("PDT", "DT", "NNS", "VBP", "JJ", "TO", "NNS", "CC", "NNS", ".")
-pos_difference_second_sentence <- c("☑", "", "", "", "", "", "", "", "", "")
+pos_custom_evaluation_second_sentence <- c("PDT", "DT", "NNS", "VBP", "JJ", "TO", "NPS", "CC", "NNS", ".")
+pos_difference_second_sentence <- c("", "", "", "", "", "", "X", "", "", "")
 
 pos_second_sentence <- data.frame(
   matrix(c(second_sentence_tagged$token, second_sentence_tagged$tag, pos_custom_evaluation_second_sentence, pos_difference_second_sentence), nrow = length(second_sentence_tagged$token))
 )
 
 ## Add custom headers
-colnames(pos_second_sentence) <- c("Words in First Sentence", "Penn Treebank POS Annotation", "Custom POS Annotation", "Different")
+colnames(pos_second_sentence) <- c("Words in 2º Sentence", "POS Tag", "Custom POS Tag", "Diff")
 
-View(pos_second_sentence)
+pos_second_sentence
 ```
 
 ## Evaluation Metrics ---
 ### The precision of the previous two sentences with the overall recall are the following.
 ```{r}
 number_errors_first_sentence <- (pos_first_sentence %>%
-  dplyr::filter(Different != "") %>%
+  dplyr::filter(Diff != "") %>%
   count())$n
 number_errors_second_sentence <- (pos_second_sentence %>%
-  dplyr::filter(Different != "") %>%
+  dplyr::filter(Diff != "") %>%
   count())$n
 
 precision_first_sentence <- (length(rownames(pos_first_sentence)) - number_errors_first_sentence) / length(rownames(pos_first_sentence))
 precision_second_sentence <- (length(rownames(pos_second_sentence)) - number_errors_second_sentence) / length(rownames(pos_second_sentence))
-total_precision <- (length(rownames(pos_first_sentence)) + length(rownames(pos_second_sentence)) -
-  number_errors_first_sentence -
-  number_errors_second_sentence) / (length(rownames(pos_first_sentence)) + length(rownames(pos_second_sentence)))
 recall <- (length(rownames(pos_first_sentence)) + length(rownames(pos_second_sentence)) -
   number_errors_first_sentence -
-  number_errors_second_sentence) / length(words(selected_doc))
+  number_errors_second_sentence) / (length(rownames(pos_first_sentence)) + length(rownames(pos_second_sentence)))
 
 sprintf("Precision First Sentence: %s", precision_first_sentence)
 sprintf("Precision Second Sentence: %s", precision_second_sentence)
-sprintf("Total Precision: %s", total_precision)
 sprintf("Recall: %s", recall)
 ```
 
 ## Conclusions
-The overall...
+As observed in the previous table, the main error in the file I analyzed that the POS tagger did not take into account was the proper nouns in both singular and plural forms, such as America or Americans. Apart from that, the current tagger did not fail in the sentences I analyzed, so the results are a very good precision and recall.
