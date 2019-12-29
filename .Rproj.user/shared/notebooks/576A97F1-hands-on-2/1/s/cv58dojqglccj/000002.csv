@@ -1,4 +1,0 @@
-"0","annotations = lapply(corpus, get_annotations_from_document)"
-"2","Error in .jnew(""opennlp.tools.parser.ParserModel"", .jcast(.jnew(""java.io.FileInputStream"",  : 
-  java.lang.OutOfMemoryError: GC overhead limit exceeded
-"

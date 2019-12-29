@@ -1,2 +1,0 @@
-"0","source_pos = DirSource(""./dataset/pos"", encoding = ""UTF-8"")"
-"0","corpus = Corpus(source_pos)"
