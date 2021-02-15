@@ -1,7 +1,11 @@
-# Intelligent Systems. Hands-on 2
-## Author: Angel Igareta [angel@igareta.com](angel@igareta.com)
+# Intelligent Systems Course
+
+## Author:
+
+- Angel Igareta [angel@igareta.com](angel@igareta.com)
 
 ## Packages ----
+
 ```{r echo = T, warning = F, results = 'hide'}
 # install.packages("rJava")
 # install.packages("openNLPmodels.en", repos <- "http://datacube.wu.ac.at")
@@ -18,7 +22,8 @@ library(tm)
 library(dplyr)
 ```
 
-## Utils. [Taken from Raúl García-Castro R-Pub](https://rpubs.com/rgcmme/IS-HO2) ----
+## Utils. [Source: Raúl García-Castro R-Pub](https://rpubs.com/rgcmme/IS-HO2) ----
+
 ```{r}
 get_annotations_from_document <- function(doc) {
   x <- as.String(doc)
@@ -50,8 +55,9 @@ get_annotated_plain_text_document <- function(doc, annotations) {
 ```
 
 ## Load corpus ----
+
 ```{r}
-corpus_source <- DirSource("./dataset/pos", encoding = "UTF-8")
+corpus_source <- DirSource("../data/pos", encoding = "UTF-8")
 corpus <- Corpus(corpus_source)
 
 ## I will use only the selected corpus as the excercise asked, the transformations would be the same for the rest.
@@ -59,30 +65,37 @@ selected_corpus <- corpus["cv687_21100.txt"]
 ```
 
 ## Annotation ----
+
 ```{r}
 gc()
 selected_corpus_annotations <- lapply(selected_corpus, get_annotations_from_document)
 ```
 
 ### Show annotations sentences and words
+
 ```{r}
 head(selected_corpus_annotations[[1]])
 tail(selected_corpus_annotations[[1]])
 ```
 
 ### Attach the annotations to the document and store the annotated corpus in another variable
+
 ```{r}
 selected_corpus_tagged <- Map(get_annotated_plain_text_document, selected_corpus, selected_corpus_annotations)
 selected_corpus_tagged[[1]]
 ```
 
 ### Store all the annotations inline with the text and store the annotated corpus in another variable
+
 ```{r}
 selected_corpus_tagged_text <- Map(get_annotated_merged_document, selected_corpus, selected_corpus_annotations)
 selected_corpus_tagged_text[[1]]
 ```
+
 ## Evaluation ----
+
 ### Perform evaluation of the first two sentences of the selected corpus
+
 ```{r}
 selected_doc <- selected_corpus_tagged[[1]]
 
@@ -93,6 +106,7 @@ second_sentence_tagged <- tagged_sents(selected_doc)[[5]]
 ```
 
 ### Show evaluation comparision for first sentence
+
 ```{r}
 pos_custom_evaluation_first_sentence <- c("JJ", "NN", "NNS", "VBP", "RB", "VBN", "NNP", ".")
 pos_difference_first_sentence <- c("", "", "", "", "", "", "X", "")
@@ -107,6 +121,7 @@ pos_first_sentence
 ```
 
 ### Show evaluation comparision for second sentence
+
 ```{r}
 pos_custom_evaluation_second_sentence <- c("PDT", "DT", "NNS", "VBP", "JJ", "TO", "NPS", "CC", "NNS", ".")
 pos_difference_second_sentence <- c("", "", "", "", "", "", "X", "", "", "")
@@ -122,7 +137,9 @@ pos_second_sentence
 ```
 
 ## Evaluation Metrics ---
+
 ### The precision of the previous two sentences with the overall recall are the following.
+
 ```{r}
 number_errors_first_sentence <- (pos_first_sentence %>%
   dplyr::filter(Diff != "") %>%
@@ -143,4 +160,5 @@ sprintf("Recall: %s", recall)
 ```
 
 ## Conclusions
+
 As observed in the previous table, the main error in the file I analyzed that the POS tagger did not take into account was the proper nouns in both singular and plural forms, such as America or Americans. Apart from that, the current tagger did not fail in the sentences I analyzed, so the results are a very good precision and recall.

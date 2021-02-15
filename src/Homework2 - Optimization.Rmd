@@ -1,7 +1,11 @@
-# Intelligent Systems. Hands-on 2
-## Author: Angel Igareta [angel@igareta.com](angel@igareta.com)
+# Intelligent Systems Course
+
+## Author
+
+- Angel Igareta [angel@igareta.com](angel@igareta.com)
 
 ## Packages ----
+
 ```{r echo = T, warning = F, results = 'hide'}
 # install.packages("rJava")
 # install.packages("openNLPmodels.en", repos <- "http://datacube.wu.ac.at", lib = "D:/angel/Documents/R/win-library/3.6")
@@ -23,7 +27,8 @@ library(stringr)
 library(ggplot2)
 ```
 
-## Utils. [Taken from Raúl García-Castro R-Pub](https://rpubs.com/rgcmme/IS-HO3) ----
+## Utils. [Source: Raúl García-Castro R-Pub](https://rpubs.com/rgcmme/IS-HO3) ----
+
 ```{r}
 get_annotations_from_document <- function(doc) {
   x <- as.String(doc)
@@ -249,37 +254,44 @@ calculate_metrics <- function(matches, matches.gs) {
 ```
 
 ## Load corpus ----
+
 ```{r}
 ## Test with a reduced corpus due Java issues
-corpus_source <- DirSource("./dataset/pos-reduced", encoding = "UTF-8")
+corpus_source <- DirSource("../data/pos-reduced", encoding = "UTF-8")
 corpus <- Corpus(corpus_source)
 ```
 
 ## Annotation ----
+
 ```{r}
 corpus_annotations <- lapply(corpus, get_annotations_from_document)
 ```
 
 ### Show annotations sentences and words
+
 ```{r}
 head(corpus_annotations[[1]])
 tail(corpus_annotations[[1]])
 ```
 
 ### Attach the annotations to the document and store the annotated corpus in another variable
+
 ```{r}
 corpus_tagged <- Map(get_annotated_plain_text_document, corpus, corpus_annotations)
 corpus_tagged[[1]]
 ```
 
 ### Store all the annotations inline with the text and store the annotated corpus in another variable
+
 ```{r}
 corpus_tagged_text <- Map(get_annotated_merged_document, corpus, corpus_annotations)
 corpus_tagged_text[[1]]
 ```
 
 ## Patterns ----
+
 ### Given patterns
+
 ```{r}
 patterns <- "created/VBN by/IN ([A-z]*)/NN ([A-z]*)/NN"
 patterns <- c(patterns, "created/VBN by/IN [A-z]*/NN [A-z]*/NN \\(/-LRB- and/CC ([A-z]*)/JJ ([A-z]*)/NN")
@@ -290,6 +302,7 @@ patterns <- c(patterns, "oscar/NN winner/NN ([A-z]*)/VBG ([A-z]*)/NNS")
 ```
 
 ### Extension patterns
+
 ```{r}
 patterns <- c(patterns, "screenwriters/NNS [A-z]*/(?:NN[S]?|JJ) [A-z]*/(?:NN[S]?|JJ) \\(/-LRB- [A-z /]* \\)/-RRB- and/CC ([A-z]*)/(?:NN[S]?|JJ) ([A-z]*)/(?:NN|JJ)") # catch second screen writer
 patterns <- c(patterns, "([A-z]*)/NN ([A-z]*)/NN is/VBZ [A-z]*/VBG") ## name surnname is verb-ing ....
@@ -298,6 +311,7 @@ patterns <- c(patterns, "([A-z]*)/NN and/CC [A-z]*/JJ [A-z]*/NN[S]?") # name and
 ```
 
 ### Patterns after analyzing the files randomly
+
 ```{r}
 patterns <- c(patterns, "a/DT ([A-z]*)/(?:NN[S]?|JJ) ([A-z]*)/(?:NN[S]?|JJ) film/NN") # a name surname film
 patterns <- c(patterns, "to/TO say/VB ([A-z]*)/NN and/CC [A-z]*/NN") # to say (name) and name
@@ -308,48 +322,57 @@ patterns <- c(patterns, "made/VBD ([A-z]*)/(?:NN[S]?|JJ) ([A-z]*)/(?:NN[S]?|JJ) 
 ```
 
 ### Most significant patterns to increase recall
+
 ```{r}
 patterns <- c(patterns, "([A-z]*)/(?:NN[S]?|JJ) ([A-z]*)/(?:NN[S]?|JJ|VBP) \\(/-LRB- [A-z]*/(?:NN[S]?|JJ) [A-z]*/(?:NN[S]?|JJ)") # name surname (name surname)
 patterns <- c(patterns, "\\(/-LRB- ([A-z]*)/(?:NN[S]?|JJ) ([A-z]*)/(?:NN[S]?|JJ)")  # (name surname)
 ```
 
 ### Patterns that did not work - Generated a lot of FP
+
 ```{r}
 # patterns <- c(patterns, "[A-z]*/NN and/CC ([A-z]*)/NN") name and name
 # patterns <- c(patterns, "([A-z]*)/NN ([A-z]*)/NN is|was/VBZ|VBD [A-z]*/VBG") # name surname is|was verb-ing
 ```
 
-
 ## Patterns detection ----
+
 ```{r}
 found_entities <- detect_patterns_in_tagged_corpus(corpus, corpus_tagged_text, patterns)
 ```
 
 ### Print the matches found per pattern.
+
 ```{r}
 print_matches_per_pattern(patterns, found_entities)
 ```
 
 ## Evaluation ----
+
 ### Write results file in a csv
+
 ```{r}
 write.table(found_entities, file = "results/found_entities.csv", row.names = F, na = "", sep = ";")
 ```
 
 ### Compare with a gold standard
+
 ```{r}
 matches_list <- merge_all_matches_in_lists(found_entities)
 head(found_entities)
 ```
 
 ### Load the gold standard and put all gold standard matches in a list for comparison.
+
 ```{r}
-gold_standard <- read.table(file = "dataset/goldStandard.csv", quote = "", na.strings = "",
+gold_standard <- read.table(file = "../data/goldStandard.csv", quote = "", na.strings = "",
                             colClasses = "character", sep = ";")
 gold_standard_matches_list <- merge_gold_standard_in_lists(gold_standard)
 head(gold_standard_matches_list)
 ```
+
 ### Show lists for first file
+
 ```{r}
 ## MY MATCHES
 print(unlist(matches_list$Matches[[2]]))
@@ -358,8 +381,8 @@ print(unlist(matches_list$Matches[[2]]))
 print(unlist(gold_standard_matches_list$Matches[[2]]))
 ```
 
-
 ## Final results
+
 ```{r}
 metrics <- calculate_metrics(matches_list, gold_standard_matches_list)
 
@@ -368,8 +391,9 @@ metrics
 ```
 
 ## Conclusion
+
 In this exercise I tried to obtain a higher recall by sacrificing a bit of accuracy, obtaining a great recall of around 0.4 in the files I tested the patterns on and an accuracy of 0.8. The great result is that the F measure is very high, which indicates a good performance.
 
- In order to do so, I did a research in random files to study where the names usually appeared. I found out one of the most common places was between parenthesis, in order to explain a reference. Hence, that is where I found the most significant patterns to increase the recall.
+In order to do so, I did a research in random files to study where the names usually appeared. I found out one of the most common places was between parenthesis, in order to explain a reference. Hence, that is where I found the most significant patterns to increase the recall.
 
 I would have liked to have a more powerful PC to run the metrics over the whole corpus, but I could only select a reduced dataset, as my computer had java memory issues otherwise.
