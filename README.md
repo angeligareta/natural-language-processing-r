@@ -18,4 +18,4 @@ In the [second part](https://angeligareta.com/natural-language-processing-r/Home
 The tasks were developed using R programming language, in the format of R markdown to explain every step.
 
 ## Author
-- Angel Igareta [angel@igareta.com](mailto:angel@igareta.com)
+- Angel Igareta ([angel@igareta.com](mailto:angel@igareta.com))
